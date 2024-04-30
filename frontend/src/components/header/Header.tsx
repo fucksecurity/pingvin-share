@@ -136,12 +136,7 @@ const Header = () => {
     },
   ];
 
-  let unauthenticatedLinks: NavLink[] = [
-    {
-      link: "/auth/signIn",
-      label: t("navbar.signin"),
-    },
-  ];
+  let unauthenticatedLinks: NavLink[] = [];
 
   if (config.get("share.allowUnauthenticatedShares")) {
     unauthenticatedLinks.unshift({
@@ -157,8 +152,8 @@ const Header = () => {
     });
 
   if (config.get("general.showLogin"))
-      unauthenticatedLinks.unshift({
-        link: "/",
+    unauthenticatedLinks.unshift({
+        link: "/auth/signIn",
         label: t("navbar.signin"),
       });
 
