@@ -26,6 +26,7 @@ ALTER TABLE "new_Config" RENAME TO "Config";
  UPDATE config SET category = "internal" WHERE key = "JWT_SECRET";
  UPDATE config SET category = "general" WHERE key = "APP_URL";
  UPDATE config SET category = "general" WHERE key = "SHOW_HOME_PAGE";
+ UPDATE config SET category = "general" WHERE key = "SHOW_LOGIN";
  UPDATE config SET category = "share" WHERE key = "ALLOW_REGISTRATION";
  UPDATE config SET category = "share" WHERE key = "ALLOW_UNAUTHENTICATED_SHARES";
  UPDATE config SET category = "share" WHERE key = "MAX_FILE_SIZE";
