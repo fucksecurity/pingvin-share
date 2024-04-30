@@ -25,6 +25,11 @@ const configVariables: ConfigVariables = {
       defaultValue: "true",
       secret: false,
     },
+    showLogin: {
+      type: "boolean",
+      defaultValue: "true",
+      secret: false,
+    },
   },
   share: {
     allowRegistration: {

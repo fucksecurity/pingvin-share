@@ -35,6 +35,9 @@ INSERT INTO new_Config ("category", "name" , "description", "locked", "obscured"
 SELECT 'general', 'showHomePage', "description", "locked", "obscured", 2, "secret", "type", "updatedAt", "value" FROM Config WHERE key = 'SHOW_HOME_PAGE';
 
 INSERT INTO new_Config ("category", "name" , "description", "locked", "obscured", "order", "secret", "type", "updatedAt", "value")
+SELECT 'general', 'showHomePage', "description", "locked", "obscured", 2, "secret", "type", "updatedAt", "value" FROM Config WHERE key = 'SHOW_HOME_PAGE';
+
+INSERT INTO new_Config ("category", "name" , "description", "locked", "obscured", "order", "secret", "type", "updatedAt", "value")
 SELECT 'share', 'allowRegistration', "description", "locked", "obscured", 0, "secret", "type", "updatedAt", "value" FROM Config WHERE key = 'ALLOW_REGISTRATION';
 
 INSERT INTO new_Config ("category", "name" , "description", "locked", "obscured", "order", "secret", "type", "updatedAt", "value")

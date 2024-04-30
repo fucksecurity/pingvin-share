@@ -156,6 +156,12 @@ const Header = () => {
       label: t("navbar.home"),
     });
 
+  if (config.get("general.showLogin"))
+      unauthenticatedLinks.unshift({
+        link: "/",
+        label: t("navbar.signin"),
+      });
+
   if (config.get("share.allowRegistration"))
     unauthenticatedLinks.push({
       link: "/auth/signUp",
