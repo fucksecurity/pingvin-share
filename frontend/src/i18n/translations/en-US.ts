@@ -384,6 +384,9 @@ export default {
   "admin.config.general.show-home-page": "Show home page",
   "admin.config.general.show-home-page.description":
     "Whether to show the home page",
+  "admin.config.general.show-login": "Show login link",
+  "admin.config.general.show-login.description":
+    "Whether to show the login link",
   "admin.config.general.logo": "Logo",
   "admin.config.general.logo.description":
     "Change your logo by uploading a new image. The image must be a PNG and should have the format 1:1.",
