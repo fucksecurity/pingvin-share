@@ -83,11 +83,11 @@ const CreateEnableTotpModal = ({
             </span>
           </Center>
 
-          <Tooltip label={t("account.modal.totp.clickToCopy")}>
+          <Tooltip label={t("common.button.clickToCopy")}>
             <Button
               onClick={() => {
                 navigator.clipboard.writeText(options.secret);
-                toast.success("Copied to clipboard");
+                toast.success(t("common.notify.copied"));
               }}
             >
               {options.secret}

@@ -10,7 +10,7 @@ import {
 } from "@mantine/core";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { TbRefresh, TbSettings, TbUsers } from "react-icons/tb";
+import { TbLink, TbRefresh, TbSettings, TbUsers } from "react-icons/tb";
 import { FormattedMessage } from "react-intl";
 import Meta from "../../components/Meta";
 import useTranslate from "../../hooks/useTranslate.hook";
@@ -42,6 +42,11 @@ const Admin = () => {
       route: "/admin/users",
     },
     {
+      title: t("admin.button.shares"),
+      icon: TbLink,
+      route: "/admin/shares",
+    },
+    {
       title: t("admin.button.config"),
       icon: TbSettings,
       route: "/admin/config/general",
@@ -49,19 +54,22 @@ const Admin = () => {
   ]);
 
   useEffect(() => {
-    configService.isNewReleaseAvailable().then((isNewReleaseAvailable) => {
-      if (isNewReleaseAvailable) {
-        setManagementOptions([
-          ...managementOptions,
-          {
-            title: "Update",
-            icon: TbRefresh,
-            route:
-              "https://github.com/stonith404/pingvin-share/releases/latest",
-          },
-        ]);
-      }
-    });
+    configService
+      .isNewReleaseAvailable()
+      .then((isNewReleaseAvailable) => {
+        if (isNewReleaseAvailable) {
+          setManagementOptions([
+            ...managementOptions,
+            {
+              title: "Update",
+              icon: TbRefresh,
+              route:
+                "https://github.com/stonith404/pingvin-share/releases/latest",
+            },
+          ]);
+        }
+      })
+      .catch();
   }, []);
 
   return (

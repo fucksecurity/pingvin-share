@@ -1,13 +1,13 @@
-import { Logger } from "@nestjs/common";
-import fetch from "node-fetch";
-import { ConfigService } from "../../config/config.service";
+import { InternalServerErrorException, Logger } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Cache } from "cache-manager";
+import * as jmespath from "jmespath";
 import { nanoid } from "nanoid";
+import { ConfigService } from "../../config/config.service";
 import { OAuthCallbackDto } from "../dto/oauthCallback.dto";
-import { OAuthProvider, OAuthToken } from "./oauthProvider.interface";
 import { OAuthSignInDto } from "../dto/oauthSignIn.dto";
 import { ErrorPageException } from "../exceptions/errorPage.exception";
+import { OAuthProvider, OAuthToken } from "./oauthProvider.interface";
 
 export abstract class GenericOidcProvider implements OAuthProvider<OidcToken> {
   protected discoveryUri: string;
@@ -25,7 +25,7 @@ export abstract class GenericOidcProvider implements OAuthProvider<OidcToken> {
     protected cache: Cache,
   ) {
     this.discoveryUri = this.getDiscoveryUri();
-    this.config.addListener("update", (key: string, _: unknown) => {
+    this.config.addListener("update", (key: string) => {
       if (this.keyOfConfigUpdateEvents.includes(key)) {
         this.deinit();
         this.discoveryUri = this.getDiscoveryUri();
@@ -70,7 +70,10 @@ export abstract class GenericOidcProvider implements OAuthProvider<OidcToken> {
       new URLSearchParams({
         client_id: this.config.get(`oauth.${this.name}-clientId`),
         response_type: "code",
-        scope: "openid profile email",
+        scope:
+          this.name == "oidc"
+            ? this.config.get(`oauth.oidc-scope`)
+            : "openid email profile",
         redirect_uri: this.getRedirectUri(),
         state,
         nonce,
@@ -94,7 +97,7 @@ export abstract class GenericOidcProvider implements OAuthProvider<OidcToken> {
         redirect_uri: this.getRedirectUri(),
       }).toString(),
     });
-    const token: OidcToken = await res.json();
+    const token = (await res.json()) as OidcToken;
     return {
       accessToken: token.access_token,
       expiresIn: token.expires_in,
@@ -109,9 +112,20 @@ export abstract class GenericOidcProvider implements OAuthProvider<OidcToken> {
     token: OAuthToken<OidcToken>,
     query: OAuthCallbackDto,
     claim?: string,
+    roleConfig?: {
+      path?: string;
+      generalAccess?: string;
+      adminAccess?: string;
+    },
   ): Promise<OAuthSignInDto> {
     const idTokenData = this.decodeIdToken(token.idToken);
-    // maybe it's not necessary to verify the id token since it's directly obtained from the provider
+
+    if (!idTokenData) {
+      this.logger.error(
+        `Can not get ID Token from response ${JSON.stringify(token.rawToken, undefined, 2)}`,
+      );
+      throw new InternalServerErrorException();
+    }
 
     const key = `oauth-${this.name}-nonce-${query.state}`;
     const nonce = await this.cache.get(key);
@@ -125,9 +139,45 @@ export abstract class GenericOidcProvider implements OAuthProvider<OidcToken> {
 
     const username = claim
       ? idTokenData[claim]
-      : idTokenData.name ||
-        idTokenData.nickname ||
-        idTokenData.preferred_username;
+      : idTokenData.preferred_username ||
+        idTokenData.name ||
+        idTokenData.nickname;
+
+    let isAdmin: boolean;
+
+    if (roleConfig?.path) {
+      // A path to read roles from the token is configured
+      let roles: string[] = [];
+      try {
+        const rolesClaim = jmespath.search(idTokenData, roleConfig.path);
+        if (Array.isArray(rolesClaim)) {
+          roles = rolesClaim;
+        }
+      } catch (e) {
+        this.logger.warn(
+          `Roles not found at path ${roleConfig.path} in ID Token ${JSON.stringify(
+            idTokenData,
+            undefined,
+            2,
+          )}`,
+        );
+      }
+
+      if (
+        roleConfig.generalAccess &&
+        !roles.includes(roleConfig.generalAccess)
+      ) {
+        // Role for general access is configured and the user does not have it
+        this.logger.error(
+          `User roles ${roles} do not include ${roleConfig.generalAccess}`,
+        );
+        throw new ErrorPageException("user_not_allowed");
+      }
+      if (roleConfig.adminAccess) {
+        // Role for admin access is configured
+        isAdmin = roles.includes(roleConfig.adminAccess);
+      }
+    }
 
     if (!username) {
       this.logger.error(
@@ -147,6 +197,8 @@ export abstract class GenericOidcProvider implements OAuthProvider<OidcToken> {
       email: idTokenData.email,
       providerId: idTokenData.sub,
       providerUsername: username,
+      ...(isAdmin !== undefined && { isAdmin }),
+      idToken: `${this.name}:${token.idToken}`,
     };
   }
 
@@ -159,7 +211,7 @@ export abstract class GenericOidcProvider implements OAuthProvider<OidcToken> {
       : Date.now() + 1000 * 60 * 60 * 24;
     this.configuration = {
       expires,
-      data: await res.json(),
+      data: (await res.json()) as OidcConfiguration,
     };
   }
 
@@ -201,6 +253,8 @@ export interface OidcConfiguration {
   id_token_signing_alg_values_supported: string[];
   scopes_supported?: string[];
   claims_supported?: string[];
+  frontchannel_logout_supported?: boolean;
+  end_session_endpoint?: string;
 }
 
 export interface OidcJwk {

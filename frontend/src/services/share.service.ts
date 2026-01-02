@@ -11,7 +11,14 @@ import {
 } from "../types/share.type";
 import api from "./api.service";
 
-const create = async (share: CreateShare) => {
+const list = async (): Promise<MyShare[]> => {
+  return (await api.get(`shares/all`)).data;
+};
+
+const create = async (share: CreateShare, isReverseShare = false) => {
+  if (!isReverseShare) {
+    deleteCookie("reverse_share_token");
+  }
   return (await api.post("shares", share)).data;
 };
 
@@ -105,6 +112,8 @@ const createReverseShare = async (
   maxShareSize: number,
   maxUseCount: number,
   sendEmailNotification: boolean,
+  simplified: boolean,
+  publicAccess: boolean,
 ) => {
   return (
     await api.post("reverseShares", {
@@ -112,6 +121,8 @@ const createReverseShare = async (
       maxShareSize: maxShareSize.toString(),
       maxUseCount,
       sendEmailNotification,
+      simplified,
+      publicAccess,
     })
   ).data;
 };
@@ -131,6 +142,7 @@ const removeReverseShare = async (id: string) => {
 };
 
 export default {
+  list,
   create,
   completeShare,
   revertComplete,

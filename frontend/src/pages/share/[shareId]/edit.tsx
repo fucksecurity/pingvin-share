@@ -2,12 +2,13 @@ import { LoadingOverlay } from "@mantine/core";
 import { useModals } from "@mantine/modals";
 import { GetServerSidePropsContext } from "next";
 import { useEffect, useState } from "react";
+import Meta from "../../../components/Meta";
 import showErrorModal from "../../../components/share/showErrorModal";
+import EditableUpload from "../../../components/upload/EditableUpload";
+import useConfirmLeave from "../../../hooks/confirm-leave.hook";
+import useTranslate from "../../../hooks/useTranslate.hook";
 import shareService from "../../../services/share.service";
 import { Share as ShareType } from "../../../types/share.type";
-import useTranslate from "../../../hooks/useTranslate.hook";
-import EditableUpload from "../../../components/upload/EditableUpload";
-import Meta from "../../../components/Meta";
 
 export function getServerSideProps(context: GetServerSidePropsContext) {
   return {
@@ -18,8 +19,14 @@ export function getServerSideProps(context: GetServerSidePropsContext) {
 const Share = ({ shareId }: { shareId: string }) => {
   const t = useTranslate();
   const modals = useModals();
+
   const [isLoading, setIsLoading] = useState(true);
   const [share, setShare] = useState<ShareType>();
+
+  useConfirmLeave({
+    message: t("upload.notify.confirm-leave"),
+    enabled: isLoading,
+  });
 
   useEffect(() => {
     shareService
@@ -43,6 +50,12 @@ const Share = ({ shareId }: { shareId: string }) => {
               t("share.error.not-found.description"),
             );
           }
+        } else if (e.response.status == 403 && error == "share_removed") {
+          showErrorModal(
+            modals,
+            t("share.error.access-denied.title"),
+            t("share.error.access-denied.description"),
+          );
         } else {
           showErrorModal(modals, t("common.error"), t("common.error.unknown"));
         }

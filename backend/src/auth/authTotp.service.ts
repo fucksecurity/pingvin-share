@@ -5,9 +5,9 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { User } from "@prisma/client";
-import * as argon from "argon2";
 import { authenticator, totp } from "otplib";
 import * as qrcode from "qrcode-svg";
+import { ConfigService } from "src/config/config.service";
 import { PrismaService } from "src/prisma/prisma.service";
 import { AuthService } from "./auth.service";
 import { AuthSignInTotpDTO } from "./dto/authSignInTotp.dto";
@@ -16,6 +16,7 @@ import { AuthSignInTotpDTO } from "./dto/authSignInTotp.dto";
 export class AuthTotpService {
   constructor(
     private prisma: PrismaService,
+    private configService: ConfigService,
     private authService: AuthService,
   ) {}
 
@@ -63,7 +64,7 @@ export class AuthTotpService {
   }
 
   async enableTotp(user: User, password: string) {
-    if (!(await argon.verify(user.password, password)))
+    if (!this.authService.verifyPassword(user, password))
       throw new ForbiddenException("Invalid password");
 
     // Check if we have a secret already
@@ -76,13 +77,10 @@ export class AuthTotpService {
       throw new BadRequestException("TOTP is already enabled");
     }
 
+    const issuer = this.configService.get("general.appName");
     const secret = authenticator.generateSecret();
 
-    const otpURL = totp.keyuri(
-      user.username || user.email,
-      "pingvin-share",
-      secret,
-    );
+    const otpURL = totp.keyuri(user.username || user.email, issuer, secret);
 
     await this.prisma.user.update({
       where: { id: user.id },
@@ -107,9 +105,8 @@ export class AuthTotpService {
     };
   }
 
-  // TODO: Maybe require a token to verify that the user who started enabling totp is the one who is verifying it?
   async verifyTotp(user: User, password: string, code: string) {
-    if (!(await argon.verify(user.password, password)))
+    if (!this.authService.verifyPassword(user, password))
       throw new ForbiddenException("Invalid password");
 
     const { totpSecret } = await this.prisma.user.findUnique({
@@ -138,7 +135,7 @@ export class AuthTotpService {
   }
 
   async disableTotp(user: User, password: string, code: string) {
-    if (!(await argon.verify(user.password, password)))
+    if (!this.authService.verifyPassword(user, password))
       throw new ForbiddenException("Invalid password");
 
     const { totpSecret } = await this.prisma.user.findUnique({

@@ -3,15 +3,17 @@ import {
   ColorSchemeProvider,
   Container,
   MantineProvider,
+  Stack,
 } from "@mantine/core";
 import { useColorScheme } from "@mantine/hooks";
 import { ModalsProvider } from "@mantine/modals";
 import { Notifications } from "@mantine/notifications";
 import axios from "axios";
 import { getCookie, setCookie } from "cookies-next";
+import moment from "moment";
+import "moment/min/locales";
 import { GetServerSidePropsContext } from "next";
 import type { AppProps } from "next/app";
-import getConfig from "next/config";
 import Head from "next/head";
 import { useRouter } from "next/router";
 import { useEffect, useRef, useState } from "react";
@@ -29,6 +31,7 @@ import Config from "../types/config.type";
 import { CurrentUser } from "../types/user.type";
 import i18nUtil from "../utils/i18n.util";
 import userPreferences from "../utils/userPreferences.util";
+import Footer from "../components/footer/Footer";
 
 const excludeDefaultLayoutRoutes = ["/admin/config/[category]"];
 
@@ -84,6 +87,7 @@ function App({ Component, pageProps }: AppProps) {
   };
 
   const language = useRef(pageProps.language);
+  moment.locale(language.current);
 
   return (
     <>
@@ -132,10 +136,18 @@ function App({ Component, pageProps }: AppProps) {
                     <Component {...pageProps} />
                   ) : (
                     <>
-                      <Header />
-                      <Container>
-                        <Component {...pageProps} />
-                      </Container>
+                      <Stack
+                        justify="space-between"
+                        sx={{ minHeight: "100vh" }}
+                      >
+                        <div>
+                          <Header />
+                          <Container>
+                            <Component {...pageProps} />
+                          </Container>
+                        </div>
+                        <Footer />
+                      </Stack>
                     </>
                   )}
                 </UserContext.Provider>
@@ -151,8 +163,6 @@ function App({ Component, pageProps }: AppProps) {
 // Fetch user and config variables on server side when the first request is made
 // These will get passed as a page prop to the App component and stored in the contexts
 App.getInitialProps = async ({ ctx }: { ctx: GetServerSidePropsContext }) => {
-  const { apiURL } = getConfig().serverRuntimeConfig;
-
   let pageProps: {
     user?: CurrentUser;
     configVariables?: Config[];
@@ -166,6 +176,7 @@ App.getInitialProps = async ({ ctx }: { ctx: GetServerSidePropsContext }) => {
   };
 
   if (ctx.req) {
+    const apiURL = process.env.API_URL || "http://localhost:8080";
     const cookieHeader = ctx.req.headers.cookie;
 
     pageProps.user = await axios(`${apiURL}/api/users/me`, {

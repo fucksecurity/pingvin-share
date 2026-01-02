@@ -1,4 +1,4 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { forwardRef, Inject, Injectable, Logger } from "@nestjs/common";
 import { User } from "@prisma/client";
 import { nanoid } from "nanoid";
 import { AuthService } from "../auth/auth.service";
@@ -6,15 +6,19 @@ import { ConfigService } from "../config/config.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { OAuthSignInDto } from "./dto/oauthSignIn.dto";
 import { ErrorPageException } from "./exceptions/errorPage.exception";
+import { OAuthProvider } from "./provider/oauthProvider.interface";
 
 @Injectable()
 export class OAuthService {
   constructor(
     private prisma: PrismaService,
     private config: ConfigService,
-    private auth: AuthService,
+    @Inject(forwardRef(() => AuthService)) private auth: AuthService,
     @Inject("OAUTH_PLATFORMS") private platforms: string[],
+    @Inject("OAUTH_PROVIDERS")
+    private oAuthProviders: Record<string, OAuthProvider<unknown>>,
   ) {}
+  private readonly logger = new Logger(OAuthService.name);
 
   available(): string[] {
     return this.platforms
@@ -24,6 +28,18 @@ export class OAuthService {
       ])
       .filter(([_, enabled]) => enabled)
       .map(([platform, _]) => platform);
+  }
+
+  availableProviders(): Record<string, OAuthProvider<unknown>> {
+    return Object.fromEntries(
+      Object.entries(this.oAuthProviders)
+        .map(([providerName, provider]) => [
+          [providerName, provider],
+          this.config.get(`oauth.${providerName}-enabled`),
+        ])
+        .filter(([_, enabled]) => enabled)
+        .map(([provider, _]) => provider),
+    );
   }
 
   async status(user: User) {
@@ -39,21 +55,25 @@ export class OAuthService {
     return Object.fromEntries(oauthUsers.map((u) => [u.provider, u]));
   }
 
-  async signIn(user: OAuthSignInDto) {
+  async signIn(user: OAuthSignInDto, ip: string) {
     const oauthUser = await this.prisma.oAuthUser.findFirst({
       where: {
         provider: user.provider,
         providerUserId: user.providerId,
       },
-      include: {
-        user: true,
-      },
     });
     if (oauthUser) {
-      return this.auth.generateToken(oauthUser.user, true);
+      await this.updateIsAdmin(oauthUser.userId, user.isAdmin);
+      const updatedUser = await this.prisma.user.findFirst({
+        where: {
+          id: oauthUser.userId,
+        },
+      });
+      this.logger.log(`Successful login for user ${user.email} from IP ${ip}`);
+      return this.auth.generateToken(updatedUser, { idToken: user.idToken });
     }
 
-    return this.signUp(user);
+    return this.signUp(user, ip);
   }
 
   async link(
@@ -102,9 +122,11 @@ export class OAuthService {
     }
   }
 
-  private async getAvailableUsername(email: string) {
-    // only remove + and - from email for now (maybe not enough)
-    let username = email.split("@")[0].replace(/[+-]/g, "").substring(0, 20);
+  private async getAvailableUsername(preferredUsername: string) {
+    // Only keep letters, numbers, dots, and underscores. Truncate to 20 characters.
+    let username = preferredUsername
+      .replace(/[^a-zA-Z0-9._]/g, "")
+      .substring(0, 20);
     while (true) {
       const user = await this.prisma.user.findFirst({
         where: {
@@ -119,7 +141,7 @@ export class OAuthService {
     }
   }
 
-  private async signUp(user: OAuthSignInDto) {
+  private async signUp(user: OAuthSignInDto, ip: string) {
     // register
     if (!this.config.get("oauth.allowRegistration")) {
       throw new ErrorPageException("no_user", "/auth/signIn", [
@@ -148,14 +170,19 @@ export class OAuthService {
           userId: existingUser.id,
         },
       });
-      return this.auth.generateToken(existingUser, true);
+      await this.updateIsAdmin(existingUser.id, user.isAdmin);
+      return this.auth.generateToken(existingUser, { idToken: user.idToken });
     }
 
-    const result = await this.auth.signUp({
-      email: user.email,
-      username: await this.getAvailableUsername(user.email),
-      password: null,
-    });
+    const result = await this.auth.signUp(
+      {
+        email: user.email,
+        username: await this.getAvailableUsername(user.providerUsername),
+        password: null,
+      },
+      ip,
+      user.isAdmin,
+    );
 
     await this.prisma.oAuthUser.create({
       data: {
@@ -167,5 +194,17 @@ export class OAuthService {
     });
 
     return result;
+  }
+
+  private async updateIsAdmin(userId: string, isAdmin?: boolean) {
+    if (!isAdmin) return;
+    await this.prisma.user.update({
+      where: {
+        id: userId,
+      },
+      data: {
+        isAdmin: isAdmin,
+      },
+    });
   }
 }

@@ -9,24 +9,27 @@ import {
   Switch,
   Text,
 } from "@mantine/core";
-import { useForm } from "@mantine/form";
+import { useForm, yupResolver } from "@mantine/form";
 import { useModals } from "@mantine/modals";
 import { ModalsContextProps } from "@mantine/modals/lib/context";
+import { getCookie, setCookie } from "cookies-next";
 import moment from "moment";
 import { FormattedMessage } from "react-intl";
+import * as yup from "yup";
 import useTranslate, {
   translateOutsideContext,
 } from "../../../hooks/useTranslate.hook";
 import shareService from "../../../services/share.service";
+import { Timespan } from "../../../types/timespan.type";
 import { getExpirationPreview } from "../../../utils/date.util";
 import toast from "../../../utils/toast.util";
-import FileSizeInput from "../FileSizeInput";
+import FileSizeInput from "../../core/FileSizeInput";
 import showCompletedReverseShareModal from "./showCompletedReverseShareModal";
 
 const showCreateReverseShareModal = (
   modals: ModalsContextProps,
   showSendEmailNotificationOption: boolean,
-  maxExpirationInHours: number,
+  maxExpiration: Timespan,
   getReverseShares: () => void,
 ) => {
   const t = translateOutsideContext();
@@ -36,7 +39,7 @@ const showCreateReverseShareModal = (
       <Body
         showSendEmailNotificationOption={showSendEmailNotificationOption}
         getReverseShares={getReverseShares}
-        maxExpirationInHours={maxExpirationInHours}
+        maxExpiration={maxExpiration}
       />
     ),
   });
@@ -45,11 +48,11 @@ const showCreateReverseShareModal = (
 const Body = ({
   getReverseShares,
   showSendEmailNotificationOption,
-  maxExpirationInHours,
+  maxExpiration,
 }: {
   getReverseShares: () => void;
   showSendEmailNotificationOption: boolean;
-  maxExpirationInHours: number;
+  maxExpiration: Timespan;
 }) => {
   const modals = useModals();
   const t = useTranslate();
@@ -61,10 +64,26 @@ const Body = ({
       sendEmailNotification: false,
       expiration_num: 1,
       expiration_unit: "-days",
+      simplified: !!(getCookie("reverse-share.simplified") ?? false),
+      publicAccess: !!(getCookie("reverse-share.public-access") ?? true),
     },
+    validate: yupResolver(
+      yup.object().shape({
+        maxUseCount: yup
+          .number()
+          .typeError(t("common.error.invalid-number"))
+          .min(1, t("common.error.number-too-small", { min: 1 }))
+          .max(1000, t("common.error.number-too-large", { max: 1000 }))
+          .required(t("common.error.field-required")),
+      }),
+    ),
   });
 
   const onSubmit = form.onSubmit(async (values) => {
+    // remember simplified and publicAccess in cookies
+    setCookie("reverse-share.simplified", values.simplified);
+    setCookie("reverse-share.public-access", values.publicAccess);
+
     const expirationDate = moment().add(
       form.values.expiration_num,
       form.values.expiration_unit.replace(
@@ -73,13 +92,17 @@ const Body = ({
       ) as moment.unitOfTime.DurationConstructor,
     );
     if (
-      maxExpirationInHours != 0 &&
-      expirationDate.isAfter(moment().add(maxExpirationInHours, "hours"))
+      maxExpiration.value != 0 &&
+      expirationDate.isAfter(
+        moment().add(maxExpiration.value, maxExpiration.unit),
+      )
     ) {
       form.setFieldError(
         "expiration_num",
         t("upload.modal.expires.error.too-long", {
-          max: moment.duration(maxExpirationInHours, "hours").humanize(),
+          max: moment
+            .duration(maxExpiration.value, maxExpiration.unit)
+            .humanize(),
         }),
       );
       return;
@@ -91,6 +114,8 @@ const Body = ({
         values.maxShareSize,
         values.maxUseCount,
         values.sendEmailNotification,
+        values.simplified,
+        values.publicAccess,
       )
       .then(({ link }) => {
         modals.closeAll();
@@ -210,7 +235,28 @@ const Body = ({
               })}
             />
           )}
-
+          <Switch
+            mt="xs"
+            labelPosition="left"
+            label={t("account.reverseShares.modal.simplified")}
+            description={t(
+              "account.reverseShares.modal.simplified.description",
+            )}
+            {...form.getInputProps("simplified", {
+              type: "checkbox",
+            })}
+          />
+          <Switch
+            mt="xs"
+            labelPosition="left"
+            label={t("account.reverseShares.modal.public-access")}
+            description={t(
+              "account.reverseShares.modal.public-access.description",
+            )}
+            {...form.getInputProps("publicAccess", {
+              type: "checkbox",
+            })}
+          />
           <Button mt="md" type="submit">
             <FormattedMessage id="common.button.create" />
           </Button>

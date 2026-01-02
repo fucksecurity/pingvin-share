@@ -7,13 +7,12 @@ import { FormattedMessage } from "react-intl";
 import useTranslate, {
   translateOutsideContext,
 } from "../../../hooks/useTranslate.hook";
-import { Share } from "../../../types/share.type";
+import { CompletedShare } from "../../../types/share.type";
 import CopyTextField from "../CopyTextField";
 
 const showCompletedUploadModal = (
   modals: ModalsContextProps,
-  share: Share,
-  appUrl: string,
+  share: CompletedShare,
 ) => {
   const t = translateOutsideContext();
   return modals.openModal({
@@ -21,20 +20,35 @@ const showCompletedUploadModal = (
     withCloseButton: false,
     closeOnEscape: false,
     title: t("upload.modal.completed.share-ready"),
-    children: <Body share={share} appUrl={appUrl} />,
+    children: <Body share={share} />,
   });
 };
 
-const Body = ({ share, appUrl }: { share: Share; appUrl: string }) => {
+const Body = ({ share }: { share: CompletedShare }) => {
   const modals = useModals();
   const router = useRouter();
   const t = useTranslate();
 
-  const link = `${appUrl}/s/${share.id}`;
+  const isReverseShare = !!router.query["reverseShareToken"];
+
+  const link = `${window.location.origin}/s/${share.id}`;
 
   return (
     <Stack align="stretch">
       <CopyTextField link={link} />
+      {share.notifyReverseShareCreator === true && (
+        <Text
+          size="sm"
+          sx={(theme) => ({
+            color:
+              theme.colorScheme === "dark"
+                ? theme.colors.gray[3]
+                : theme.colors.dark[4],
+          })}
+        >
+          {t("upload.modal.completed.notified-reverse-share-creator")}
+        </Text>
+      )}
       <Text
         size="xs"
         sx={(theme) => ({
@@ -52,7 +66,11 @@ const Body = ({ share, appUrl }: { share: Share; appUrl: string }) => {
       <Button
         onClick={() => {
           modals.closeAll();
-          router.push("/upload");
+          if (isReverseShare) {
+            router.reload();
+          } else {
+            router.push("/upload");
+          }
         }}
       >
         <FormattedMessage id="common.button.done" />

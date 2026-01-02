@@ -11,12 +11,14 @@ import FileList from "../../components/upload/FileList";
 import showCompletedUploadModal from "../../components/upload/modals/showCompletedUploadModal";
 import showCreateUploadModal from "../../components/upload/modals/showCreateUploadModal";
 import useConfig from "../../hooks/config.hook";
+import useConfirmLeave from "../../hooks/confirm-leave.hook";
 import useTranslate from "../../hooks/useTranslate.hook";
 import useUser from "../../hooks/user.hook";
 import shareService from "../../services/share.service";
 import { FileUpload } from "../../types/File.type";
 import { CreateShare, Share } from "../../types/share.type";
 import toast from "../../utils/toast.util";
+import { useRouter } from "next/router";
 
 const promiseLimit = pLimit(3);
 let errorToastShown = false;
@@ -25,11 +27,14 @@ let createdShare: Share;
 const Upload = ({
   maxShareSize,
   isReverseShare = false,
+  simplified,
 }: {
   maxShareSize?: number;
   isReverseShare: boolean;
+  simplified: boolean;
 }) => {
   const modals = useModals();
+  const router = useRouter();
   const t = useTranslate();
 
   const { user } = useUser();
@@ -37,15 +42,22 @@ const Upload = ({
   const [files, setFiles] = useState<FileUpload[]>([]);
   const [isUploading, setisUploading] = useState(false);
 
+  useConfirmLeave({
+    message: t("upload.notify.confirm-leave"),
+    enabled: isUploading,
+  });
+
   const chunkSize = useRef(parseInt(config.get("share.chunkSize")));
 
   maxShareSize ??= parseInt(config.get("share.maxSize"));
+  const autoOpenCreateUploadModal = config.get("share.autoOpenShareModal");
 
   const uploadFiles = async (share: CreateShare, files: FileUpload[]) => {
     setisUploading(true);
 
     try {
-      createdShare = await shareService.create(share);
+      const isReverseShare = router.pathname != "/upload";
+      createdShare = await shareService.create(share, isReverseShare);
     } catch (e) {
       toast.axiosError(e);
       setisUploading(false);
@@ -121,22 +133,31 @@ const Upload = ({
   };
 
   const showCreateUploadModalCallback = (files: FileUpload[]) => {
-    setFiles(files);
     showCreateUploadModal(
       modals,
       {
         isUserSignedIn: user ? true : false,
         isReverseShare,
-        appUrl: config.get("general.appUrl"),
         allowUnauthenticatedShares: config.get(
           "share.allowUnauthenticatedShares",
         ),
         enableEmailRecepients: config.get("email.enableShareEmailRecipients"),
-        maxExpirationInHours: config.get("share.maxExpiration"),
+        maxExpiration: config.get("share.maxExpiration"),
+        shareIdLength: config.get("share.shareIdLength"),
+        simplified,
       },
       files,
       uploadFiles,
     );
+  };
+
+  const handleDropzoneFilesChanged = (files: FileUpload[]) => {
+    if (autoOpenCreateUploadModal) {
+      setFiles(files);
+      showCreateUploadModalCallback(files);
+    } else {
+      setFiles((oldArr) => [...oldArr, ...files]);
+    }
   };
 
   useEffect(() => {
@@ -171,7 +192,7 @@ const Upload = ({
         .completeShare(createdShare.id)
         .then((share) => {
           setisUploading(false);
-          showCompletedUploadModal(modals, share, config.get("general.appUrl"));
+          showCompletedUploadModal(modals, share);
           setFiles([]);
         })
         .catch(() => toast.error(t("upload.notify.generic-error")));
@@ -191,8 +212,13 @@ const Upload = ({
         </Button>
       </Group>
       <Dropzone
+        title={
+          !autoOpenCreateUploadModal && files.length > 0
+            ? t("share.edit.append-upload")
+            : undefined
+        }
         maxShareSize={maxShareSize}
-        showCreateUploadModalCallback={showCreateUploadModalCallback}
+        onFilesChanged={handleDropzoneFilesChanged}
         isUploading={isUploading}
       />
       {files.length > 0 && (
